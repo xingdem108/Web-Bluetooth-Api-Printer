@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Zenpert 3R20 打印机调试</title>
+</head>
+<body>
+    <button id="searchButton">搜索设备</button>
+    <button id="connectButton" disabled>连接设备</button>
+    <button id="printButton" disabled>打印</button>
+    <script>
+        let device;
+        let characteristic;
+
+        //测试3
+        let serviceUUID = '49535343-fe7d-4ae5-8fa9-9fafd205e455';
+        let CharacteristicUUID = '49535343-6daa-4d02-abf6-19569aca69fe';
+
+        // 获取搜索设备按钮
+        const searchButton = document.getElementById('searchButton');
+        // 获取连接设备按钮
+        const connectButton = document.getElementById('connectButton');
+        // 获取打印按钮
+        const printButton = document.getElementById('printButton');
+
+        const printImmediateButton = document.getElementById('printImmediateButton');
+
+        // 添加搜索设备按钮点击事件监听器
+        searchButton.addEventListener('click', async () => {
+            try {
+                device = await searchDevices();
+                connectButton.disabled = false; // 启用连接设备按钮
+                console.log('设备已选定:', device);
+            } catch (error) {
+                console.error('搜索设备出错:', error);
+            }
+        });
+
+        // 添加连接设备按钮点击事件监听器
+        connectButton.addEventListener('click', async () => {
+            try {
+                characteristic = await connectDevice(device);
+                printButton.disabled = false; // 启用打印按钮
+                console.log('设备已连接:', device);
+            } catch (error) {
+                console.error('连接设备出错:', error);
+            }
+        });
+
+        // 添加打印按钮点击事件监听器
+        printButton.addEventListener('click', async () => {
+            try {               
+                const printDataStr = '! 10 200 200 800 1\nTEXT 4 0 160 750 Star\r\nPRINT\r\n';
+                //const printDataStr = '! 0 200 200 800 1\r\n' +
+                //    'SETLP 90\r\n' +
+                //    'B QR 400 220 M 2 U 6\r\n' +
+                //    'MA, QR code TEST\r\n' +
+                //    'ENDQR\r\n' +
+                //    'TEXT 4 0 40 60 Label ID:\r\n' +
+                //    'TEXT 4 0 40 180 Item No.:\r\n' +
+                //    'TEXT 4 0 40 300 Revision:\r\n' +
+                //    'TEXT 4 0 40 420 Quantity:\r\n' +
+                //    'TEXT 4 0 40 520 UOM:\r\n' +
+                //    'TEXT 4 0 40 640 Decription:\r\n' +
+                //    'TEXT 4 0 40 740 Receiving:\r\n' +
+                //    'TEXT 4 0 40 780 Subinventory:\r\n' +
+                //    'TEXT 4 0 40 800 Receiving Locator:\r\n' +
+                //    'PRINT\r\n';
+                // 调用打印
+                await sendPrintDataStr(characteristic, printDataStr);
+     
+            } catch (error) {
+                console.error('打印出错:', error);
+            }
+        });
+
+        // 搜索蓝牙设备
+        async function searchDevices() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { name: '3R20-909D-LE' } // 指定设备名称为 "Zenpert 3R20", name 为蓝牙名称
+                    ],
+                    optionalServices: [serviceUUID] // 替换为实际的服务UUID
+                });
+                return device;
+            } catch (error) {
+                console.error('搜索设备出错:', error);
+            }
+        }
+
+
+        // 连接设备
+        async function connectDevice(device) {
+            try {
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(serviceUUID); // 替换为实际的服务UUID
+                const characteristic = await service.getCharacteristic(CharacteristicUUID); // 替换为实际的特征UUID
+                return characteristic;
+            } catch (error) {
+                console.error('连接设备出错:', error);
+            }
+        }
+
+        // 发送打印指令和数据Str
+        async function sendPrintDataStr(characteristic, printData) {
+            try {
+                console.log(printData);
+                // 将打印数据转换为Uint8Array格式
+                const MAX_BYTE_LENGTH = 20; // 每个写入操作的最大字节数
+                const encodedData = new TextEncoder().encode(printData);
+                let offset = 0;
+
+                // 分割打印数据，并进行连续写入
+                while (offset < encodedData.length) {
+                    const chunk = encodedData.slice(offset, offset + MAX_BYTE_LENGTH);
+                    offset += MAX_BYTE_LENGTH;
+                    characteristic.writeValue(chunk);
+                    await new Promise(resolve => setTimeout(resolve, 100)); // 延迟一段时间以确保稳定传输
+                }
+                console.log('打印指令和数据发送完成');
+            } catch (error) {
+                console.error('发送打印指令和数据出错:', error);
+            }
+        }
+
+        // 发送打印指令和数据Arr
+        async function sendPrintData(characteristic, printData) {
+            try {
+                // 将打印数据转换为Uint8Array格式
+                const dataArray = new Uint8Array(printData);
+
+                // 分段发送打印数据
+                const CHUNK_SIZE = 20; // 每次发送的数据块大小
+                const totalChunks = Math.ceil(dataArray.length / CHUNK_SIZE);
+                for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                    const start = chunkIndex * CHUNK_SIZE;
+                    const end = Math.min(start + CHUNK_SIZE, dataArray.length);
+                    const chunk = dataArray.slice(start, end);
+                    await characteristic.writeValue(chunk);
+                    await new Promise(resolve => setTimeout(resolve, 100)); // 延迟一段时间以确保稳定传输
+                }
+
+                console.log('打印指令和数据发送完成');
+            } catch (error) {
+                console.error('发送打印指令和数据出错:', error);
+            }
+        }
+    </script>
+</body>
+</html>
